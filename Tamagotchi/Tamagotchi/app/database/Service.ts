@@ -22,9 +22,9 @@ export function useProductDatabase() {
       if (error.message.includes("database is locked")) {
         console.log("Database is locked, retrying...");
         await new Promise((resolve) => setTimeout(resolve, 1000));
-        return retryAsync(fn, ...args); 
+        return retryAsync(fn, ...args);
       }
-      throw error; 
+      throw error;
     }
   };
 
@@ -32,22 +32,28 @@ export function useProductDatabase() {
     const statement = await database.prepareAsync(
       `INSERT INTO todo (tipo, coin, name, hunger, sleep, fun, status, image) VALUES ($tipo, $coin, $name, $hunger, $sleep, $fun, $status, $image)`
     );
-    try {
-      const result = await statement.executeAsync({
-        $tipo: data.tipo,
-        $coin: data.coin,
-        $name: data.name,
-        $hunger: data.hunger,
-        $sleep: data.sleep,
-        $fun: data.fun,
-        $status: data.status,
-        $image: data.image,
-      });
-      const insertedRowId = result.lastInsertRowId.toLocaleString();
-      return { insertedRowId };
-    } catch (error) {
-      throw error;
-    }
+
+    return await retryAsync(async () => {
+      try {
+        const result = await statement.executeAsync({
+          $tipo: data.tipo,
+          $coin: data.coin,
+          $name: data.name,
+          $hunger: data.hunger,
+          $sleep: data.sleep,
+          $fun: data.fun,
+          $status: data.status,
+          $image: data.image,
+        });
+        const insertedRowId = result.lastInsertRowId.toLocaleString();
+        return { insertedRowId };
+      } catch (error) {
+        console.error('Erro ao criar o Todo:', error);
+        throw error;
+      } finally {
+        await statement.finalizeAsync();
+      }
+    });
   }
 
   async function getId() {
@@ -112,24 +118,41 @@ export function useProductDatabase() {
       WHERE id = $id`
     );
 
-    try {
-      await statement.executeAsync({
-        $id: id,
-        $coin: data.coin !== undefined ? data.coin : null,
-        $hunger: data.hunger !== undefined ? data.hunger : 0,
-        $sleep: data.sleep !== undefined ? data.sleep : 0,
-        $fun: data.fun !== undefined ? data.fun : 0,
-        $status: data.status !== undefined ? data.status : 0,
-      });
-    } catch (error) {
-      console.error('Erro ao atualizar o Tamagotchi:', error);
-      throw error;
-    }
+    return await retryAsync(async () => {
+      try {
+        await statement.executeAsync({
+          $id: id,
+          $coin: data.coin !== undefined ? data.coin : null,
+          $hunger: data.hunger !== undefined ? data.hunger : 0,
+          $sleep: data.sleep !== undefined ? data.sleep : 0,
+          $fun: data.fun !== undefined ? data.fun : 0,
+          $status: data.status !== undefined ? data.status : 0,
+        });
+      } catch (error) {
+        console.error('Erro ao atualizar o Tamagotchi:', error);
+        throw error;
+      } finally {
+        await statement.finalizeAsync();
+      }
+    });
   }
 
   async function deleteTamagotchiById(id: number) {
     return await retryAsync(async () => {
       await database.runAsync(`DELETE FROM todo WHERE id = ?`, [id]);
+    });
+  }
+
+  async function deleteTamagotchiByName(name: string) {
+    return await retryAsync(async () => {
+      const tamagotchi = await database.getFirstAsync<ProductDatabase>(`SELECT id FROM todo WHERE name = ?`, [name]);
+  
+      if (tamagotchi) {
+        await database.runAsync(`DELETE FROM todo WHERE id = ?`, [tamagotchi.id]);
+        console.log(`Tamagotchi com o nome "${name}" deletado com sucesso.`);
+      } else {
+        console.log(`Nenhum registro encontrado com o nome "${name}".`);
+      }
     });
   }
 
@@ -143,5 +166,6 @@ export function useProductDatabase() {
     getTamagotchiById,
     updateTamagotchi,
     deleteTamagotchiById,
+    deleteTamagotchiByName
   };
 }

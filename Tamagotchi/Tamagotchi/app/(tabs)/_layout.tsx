@@ -35,6 +35,10 @@ export default function TabLayout() {
         name="game01" 
         options={{ headerShown: false }} 
       />
+      <Stack.Screen 
+        name="game02" 
+        options={{ headerShown: false }} 
+      />
     </Stack>
   </ProgressProvider>
   );

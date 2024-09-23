@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Image, Animated, Modal, TouchableOpacity, Text, FlatList } from 'react-native';
+import { View, StyleSheet, Image, Animated, Modal, TouchableOpacity, Text, FlatList, TextInput } from 'react-native';
 import { ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NavigationProp } from '@react-navigation/native';
@@ -29,8 +29,9 @@ export default function Welcome() {
   const [hasTamagochi, setHasTamagochi] = useState(false);
   const productDatabase = useProductDatabase();
   const [modalVisible, setModalVisible] = useState(false);
+  const [modalVisibleD, setModalVisibleD] = useState(false);
   const [modalVisibleE, setModalVisibleE] = useState(false);
-  const [textoModal, setTextoModal] = useState("");
+  const [name, setName] = useState("");
   const [tamagochis, setTamagochis] = useState<Tamagochi[]>([]);
   const [ejectId, setEjectId] = useState<number | null>(null);
 
@@ -46,12 +47,18 @@ export default function Welcome() {
   const ejectTamagotchi = async (id: number) => {
     setEjectId(id);
     setModalVisibleE(true);
-
-
+    setModalVisibleD(false); 
+  
     const attemptEject = async (id: number) => {
       try {
-        await productDatabase.deleteTamagotchiById(id);
-        setTamagochis(prev => prev.filter(t => t.id !== id));
+        setTimeout(async () => {
+          setModalVisibleE(true); 
+          await new Promise(resolve => setTimeout(resolve, 6000));
+          await productDatabase.deleteTamagotchiById(id);
+          setTamagochis(prev => prev.filter(t => t.id !== id));
+          setEjectId(null);
+          setModalVisibleE(false); 
+        }, 6000); 
       } catch (error) {
         if (error instanceof Error && error.message.includes("database is locked")) {
           console.log("Database is locked, retrying...");
@@ -62,12 +69,8 @@ export default function Welcome() {
         }
       }
     };
-
-    setTimeout(async () => {
-      await attemptEject(id);
-      setEjectId(null);
-      setModalVisibleE(false);
-    }, 5000);
+  
+    await attemptEject(id);
   };
 
 
@@ -117,7 +120,9 @@ export default function Welcome() {
   }, [scrollX]);
 
 
-
+  const abrirInput = () => {
+    setModalVisibleD(true);
+  }
   const cadastrar = () => {
     navigation.navigate('cadastrar');
   };
@@ -135,6 +140,30 @@ export default function Welcome() {
         return null;
     }
   };
+  const deleteByName = async (name: string) => {
+    const tamagotchiToDelete = tamagochis.find(t => t.name === name);
+    if (tamagotchiToDelete) {
+      setEjectId(tamagotchiToDelete.id); 
+      setModalVisibleE(true);
+      setModalVisibleD(false); 
+    }
+  
+    try {
+      await productDatabase.deleteTamagotchiByName(name);
+      setTamagochis(prev => prev.filter(t => t.name !== name));
+      setModalVisibleD(false); 
+      setModalVisibleE(false); 
+    } catch (error) {
+      console.error('Error deleting Tamagotchi:', error);
+    }
+  };
+
+  const handleDelete = () => {
+    setModalVisibleD(false); 
+    deleteByName(name);
+    setModalVisibleD(false); 
+  };
+
   return (
     <View style={styles.container}>
       <Animated.View style={[styles.backgroundContainer, { transform: [{ translateX: scrollX }] }]}>
@@ -143,9 +172,14 @@ export default function Welcome() {
       </Animated.View>
       <View style={styles.containerPrincipal}>
         <Text style={styles.Title}>TAMAGOTCHIS</Text>
-        <TouchableOpacity style={styles.bttIniciar2} onPress={cadastrar}>
-          <Text style={styles.title3}>+</Text>
-        </TouchableOpacity>
+        <View style={styles.alinhar}>
+          <TouchableOpacity style={styles.bttIniciar2} onPress={cadastrar}>
+            <Text style={styles.title3}>+</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.bttIniciar3} onPress={abrirInput}>
+            <Text style={styles.title3}>-</Text>
+          </TouchableOpacity>
+        </View>
         <ScrollView style={styles.scroll}>
           {tamagochis.map((item) => {
             const statusText = getStatusText(item.status);
@@ -187,7 +221,6 @@ export default function Welcome() {
                   imageSource = null;
               }
             }
-
 
             return (
               <TouchableOpacity
@@ -240,7 +273,7 @@ export default function Welcome() {
                     style={styles.bttEjetar}
                     onPress={() => ejectTamagotchi(item.id)}
                   >
-                    <Text style={styles.textoEjetar}>EJETAR</Text>
+                    <Text style={styles.textoEjetar}>EJECT</Text>
                   </TouchableOpacity>
                 )}
               </TouchableOpacity>
@@ -253,19 +286,101 @@ export default function Welcome() {
           {ejectId !== null && renderEjectAnimation(tamagochis.find(t => t.id === ejectId)?.tipo || '')}
         </View>
       </Modal>
+      <Modal animationType="fade" transparent={true} visible={modalVisibleD} onRequestClose={() => setModalVisibleD(false)}>
+        <View style={styles.modal2}>
+          <Text style={styles.deletetext}>ENTER TAMAGOTCHI NAME</Text>
+          <TextInput
+            style={styles.textInput}
+            placeholder="Choose your name"
+            placeholderTextColor="#FFFF"
+            value={name}
+            onChangeText={setName}
+          />
+          <View style={styles.alinharbtt}>
+            <TouchableOpacity style={styles.btt} onPress={() => setModalVisibleD(false)}>
+              <Text style={styles.text}>Close</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.btt} onPress={handleDelete}>
+              <Text style={styles.text}>Eject</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  alinhar: {
+    flexDirection: 'row',
+    width: '100%',
+    justifyContent: 'space-around',
+  },
+  alinharbtt: {
+    flexDirection: 'row',
+    width: '100%',
+    height: '20%',
+    justifyContent: 'space-around',
+    top: 120,
+  },
+  btt: {
+    width: '40%',
+    height: '100%',
+    backgroundColor: 'black',
+    borderColor: 'white',
+    borderWidth: 0.5,
+    borderRadius: 5,
+  },
+  text: {
+    color: 'white',
+    fontFamily: 'Minecraft',
+    textAlign: 'center',
+    fontSize: 22,
+    top: 10,
+  },
   container: {
     flex: 1,
     backgroundColor: 'black',
   },
-  containergif: {
+  textInput: {
+    position: 'absolute',
+    alignSelf: 'center',
+    top: 70,
+    backgroundColor: 'black',
+    borderColor: 'white',
+    borderWidth: 0.5,
+    borderRadius: 5,
+    height: '20%',
+    width: '60%',
+    textAlign: 'center',
+    fontFamily: 'Minecraft', color: 'white'
+  },
+  deletetext: {
+    color: 'white',
+    fontFamily: 'Minecraft',
+    fontSize: 20,
+    top: 30,
+    textAlign: 'center',
+  },
+  containerPrincipal: {
+    alignItems: 'center',
+  },
+  scroll: {
     width: '100%',
-    height: '100%',
-    backgroundColor: 'white',
+    paddingBottom: 20,
+    marginTop: 20,
+  },
+  containerProgresso: {
+    width: '90%',
+    backgroundColor: 'black',
+    borderRadius: 5,
+    borderColor: 'white',
+    borderWidth: 0.5,
+    alignSelf: 'center',
+    marginTop:20,
+    marginBottom:20,
+    flex:1,
   },
   eject: {
     width: '100%',
@@ -296,11 +411,7 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     left: 20,
   },
-  scroll: {
-    width: '100%',
-    flexGrow: 1,
-    paddingBottom: 20,
-  },
+
   alinharCoin: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -311,16 +422,12 @@ const styles = StyleSheet.create({
   alinharcontainer2: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 5,
     marginLeft: 20,
-    top: 0,
   },
   alinharNS: {
     zIndex: 2,
-    top: 10,
+    top:5,
     alignSelf: 'center',
-    alignContent: 'center',
-
   },
   alinharbarra: {
     top: 5,
@@ -334,12 +441,21 @@ const styles = StyleSheet.create({
   },
   containerImage: {
     width: '30%',
-    height: '100%',
-    top: 10,
+    height: '50%',
   },
   modal: {
     width: '90%',
     height: '20%',
+    backgroundColor: '#1e1e1e',
+    top: 300,
+    borderRadius: 5,
+    borderColor: 'white',
+    borderWidth: 2,
+    left: 20,
+  },
+  modal2: {
+    width: '90%',
+    height: '25%',
     backgroundColor: '#1e1e1e',
     top: 300,
     borderRadius: 5,
@@ -394,12 +510,6 @@ const styles = StyleSheet.create({
     padding: 12,
     paddingTop: 20,
   },
-  containerPrincipal: {
-    flex: 1,
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    paddingTop: 20,
-  },
   bttIniciar: {
     width: '34%',
     alignContent: 'center',
@@ -419,33 +529,27 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
     padding: 10,
   },
+  bttIniciar3: {
+    width: '40%',
+    alignContent: 'center',
+    marginTop: 50,
+    backgroundColor: 'black',
+    borderRadius: 5,
+    borderColor: 'white',
+    borderWidth: 0.5,
+    padding: 10,
+  },
   tamagochiList: {
     marginTop: 10,
     width: '90%',
 
   },
-  containerProgresso: {
-    justifyContent: 'center',
-    zIndex: 1,
-    width: '90%',
-    backgroundColor: 'black',
-    borderRadius: 5,
-    borderColor: 'white',
-    borderWidth: 0.5,
-    alignSelf: 'center',
-    padding: 5,
-    height: '20%',
-    marginBottom: 10,
-    marginTop: 10,
-
-  },
   tamagochiName: {
     color: '#fff',
     fontSize: 12,
-    width: '100%',
     fontFamily: 'Minecraft',
     alignSelf: 'center',
-    bottom: 2,
+    top:-20,
   },
   tamagochiCoins: {
     color: 'yellow',
@@ -467,14 +571,16 @@ const styles = StyleSheet.create({
   },
   tamagochiImage: {
     width: '100%',
-    height: '50%',
-    resizeMode: 'contain',
+    height: '100%',
+    resizeMode: 'center',
     backgroundColor: 'black',
+    top:-20,
 
   },
   tamagochiStatus: {
     fontFamily: 'Minecraft',
     textAlign: 'center',
+    top:-15,
   },
   title3: {
     fontSize: 32,

@@ -7,6 +7,7 @@ import { BackHandler } from 'react-native';
 import ProgressBar from '../../components/BarradeProgresso';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useProductDatabase, ProductDatabase } from '../../app/database/Service';
+import { useFocusEffect } from '@react-navigation/native';
 
 type NavigationProps = NavigationProp<any>;
 
@@ -63,20 +64,25 @@ export default function Comer() {
     getTamagochiId();
   }, []);
 
-  useEffect(() => {
-    TrazerDados();
-  }, [tamagochiId]);
+  useFocusEffect(
+    React.useCallback(() => {
+      TrazerDados();
+    }, [tamagochiId])
+  );
 
 
-  const irDormir = () => {
-    navigation.navigate('Dormir')
-  }
-  const irComer = () => {
-    navigation.navigate('Comer')
-  }
-  const irJogar = () => {
-    navigation.navigate('Jogar')
-  }
+  const irDormir = async () => {
+    await saveData();
+    navigation.navigate('Dormir');
+  };
+  const irComer = async () => {
+    await saveData();
+    navigation.navigate('Comer');
+  };
+  const irJogar = async () => {
+    await saveData();
+    navigation.navigate('Jogar');
+  };
 
 
   const calculateStatus = () => {

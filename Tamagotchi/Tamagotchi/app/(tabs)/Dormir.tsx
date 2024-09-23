@@ -91,15 +91,18 @@ export default function Dormir() {
   }, [tamagochiId]);
 
 
-  const irDormir = () => {
-    navigation.navigate('Dormir')
-  }
-  const irComer = () => {
-    navigation.navigate('Comer')
-  }
-  const irJogar = () => {
-    navigation.navigate('Jogar')
-  }
+  const irDormir = async () => {
+    await saveData();
+    navigation.navigate('Dormir');
+  };
+  const irComer = async () => {
+    await saveData();
+    navigation.navigate('Comer');
+  };
+  const irJogar = async () => {
+    await saveData();
+    navigation.navigate('Jogar');
+  };
 
 
   const calculateStatus = () => {

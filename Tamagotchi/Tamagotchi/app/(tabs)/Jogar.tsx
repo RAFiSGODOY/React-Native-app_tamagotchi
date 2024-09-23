@@ -16,7 +16,7 @@ export default function Jogar() {
   const [name, setName] = useState<string>('');
   const [nameT, setNameT] = useState<string>('');
   const [tipo, setTipo] = useState<string>('');
-  const [coins, setCoin] = useState<number>(0);
+  const [coins, setCoin] = useState<number>();
   const [newcoins, setNewCoin] = useState<number>(0);
   const productDatabase = useProductDatabase();
   const { incrementHunger, incrementSleep, incrementFun } = useProgress();
@@ -67,17 +67,22 @@ export default function Jogar() {
   useEffect(() => {
     TrazerDados();
   }, [tamagochiId]);
+  useEffect(() => {
+    saveData();
+  }, [productDatabase]);
 
-
-  const irDormir = () => {
-    navigation.navigate('Dormir')
-  }
-  const irComer = () => {
-    navigation.navigate('Comer')
-  }
-  const irJogar = () => {
-    navigation.navigate('Jogar')
-  }
+  const irDormir = async () => {
+    await saveData();
+    navigation.navigate('Dormir');
+  };
+  const irComer = async () => {
+    await saveData();
+    navigation.navigate('Comer');
+  };
+  const irJogar = async () => {
+    await saveData();
+    navigation.navigate('Jogar');
+  };
 
 
   const calculateStatus = () => {
@@ -116,17 +121,17 @@ export default function Jogar() {
   const Game01 = () => {
     const updatedCoins = (coins || 0) + 10; 
     setCoin(updatedCoins); 
-    setNewCoin(updatedCoins);
-    saveData();
-    navigation.navigate('game01');
+    setNewCoin(updatedCoins); 
     incrementFun(10);
-  };
-  const Game02 = () => {
-
-    saveData();
     navigation.navigate('game01');
-    incrementFun(10);
-  };
+};
+const Game02 = () => {
+  const updatedCoins = (coins || 0) + 10; 
+  setCoin(updatedCoins); 
+  setNewCoin(updatedCoins); 
+  incrementFun(10);
+  navigation.navigate('game02');
+};
   const closeModal = () => setModalVisible(false);
   const closeModal2 = () => setModalVisibleF(false);
   const close = () => {
@@ -137,7 +142,7 @@ export default function Jogar() {
       const statusnew = (hunger ?? 0) + (sleep ?? 0) + (fun ?? 0);
       if (tamagochiId !== null) {
         await productDatabase.updateTamagotchi(tamagochiId, {
-          coin: newcoins ?? 0,
+          coin: newcoins,
           hunger: hunger ?? 100,
           sleep: sleep ?? 100,
           fun: fun ?? 100,

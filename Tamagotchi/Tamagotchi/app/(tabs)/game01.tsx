@@ -1,152 +1,194 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Dimensions, Alert, TouchableOpacity } from 'react-native';
-import { Gyroscope } from 'expo-sensors';
+import { View, Text, StyleSheet, Dimensions, Alert, Modal, Button } from 'react-native';
+import { useFonts } from 'expo-font';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Gyroscope } from 'expo-sensors';
+import { useNavigation } from '@react-navigation/native'; // Import navigation
 
 const { width, height } = Dimensions.get('window');
-const SHIP_WIDTH = 50;
-const SHIP_HEIGHT = 50;
+const BALL_RADIUS = 20;
 const OBSTACLE_SIZE = 40;
-const INITIAL_OBSTACLE_INTERVAL = 2000; // Increased interval for fewer obstacles
+const OBSTACLE_SPEED = 10;
+const INITIAL_OBSTACLE_INTERVAL = 200;
 
-type Obstacle = {
-  id: number;
-  x: number;
-  y: number;
-};
-
-const Game01 = () => {
-  const shipPositionRef = useRef({ x: width / 2 - SHIP_WIDTH / 2 });
-  const [obstacles, setObstacles] = useState<Obstacle[]>([]);
+const Game01: React.FC = () => {
+  const navigation = useNavigation(); // Initialize navigation
+  const [gyroscopeData, setGyroscopeData] = useState({ x: 0, y: 0 });
+  const [ballPosition, setBallPosition] = useState({ x: width / 2 - BALL_RADIUS, y: height - 100 });
+  const [subscription, setSubscription] = useState<any>(null);
+  const [obstacles, setObstacles] = useState<Array<{ id: number; x: number; y: number }>>([]);
+  const [gameOver, setGameOver] = useState(false);
   const obstacleId = useRef(0);
-  const obstacleIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const score = useRef(0);
-  const gyroscopeDataRef = useRef({ x: 0 });
-  const OBSTACLE_SPEED = 10; // Increased speed of obstacles
-  const [gamePaused, setGamePaused] = useState(false);
+  const obstacleInterval = useRef<NodeJS.Timeout | null>(null);
+  const [fontsLoaded] = useFonts({
+    'Minecraftia': require('../../assets/fonts/Minecraft.ttf'),
+  });
 
   useEffect(() => {
-    Gyroscope.setUpdateInterval(100);
-    const subscription = Gyroscope.addListener((data) => {
-      // Invert gyroscope data
-      gyroscopeDataRef.current = { x: -data.x };
-    });
-
+    if (!fontsLoaded) return;
+    subscribeGyroscope();
     startObstacleGeneration();
     return () => {
-      subscription.remove();
+      unsubscribeGyroscope();
       stopObstacleGeneration();
     };
-  }, []);
+  }, [fontsLoaded]);
+
+  useEffect(() => {
+    const { x, y } = gyroscopeData;
+    const ballSpeed = 10;
+
+    setBallPosition((prevPosition) => {
+      let newX = prevPosition.x + y * ballSpeed; 
+      let newY = prevPosition.y - x * ballSpeed;
+
+      // Limit ball within screen bounds
+      if (newX < 0) newX = 0;
+      if (newX > width - BALL_RADIUS * 2) newX = width - BALL_RADIUS * 2;
+      if (newY < 0) newY = 0;
+      if (newY > height - BALL_RADIUS * 2) newY = height - BALL_RADIUS * 2;
+
+      return { x: newX, y: newY };
+    });
+  }, [gyroscopeData]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (!gamePaused) {
-        // Update ship position
-        const shipSpeed = 10;
-        shipPositionRef.current.x += gyroscopeDataRef.current.x * shipSpeed;
-        shipPositionRef.current.x = Math.max(0, Math.min(shipPositionRef.current.x, width - SHIP_WIDTH));
-
-        // Update obstacles
-        setObstacles((prevObstacles) => {
-          const updatedObstacles = prevObstacles
+      if (!gameOver) {
+        setObstacles((prevObstacles) =>
+          prevObstacles
             .map((obstacle) => ({ ...obstacle, y: obstacle.y + OBSTACLE_SPEED }))
-            .filter((obstacle) => obstacle.y < height);
-
-          // Collision detection
-          updatedObstacles.forEach((obstacle) => {
-            if (
-              shipPositionRef.current.x < obstacle.x + OBSTACLE_SIZE &&
-              shipPositionRef.current.x + SHIP_WIDTH > obstacle.x &&
-              height - SHIP_HEIGHT < obstacle.y + OBSTACLE_SIZE
-            ) {
-              Alert.alert('Game Over', `Você colidiu! Sua pontuação: ${score.current}`, [
-                { text: 'OK', onPress: resetGame },
-              ]);
-              setGamePaused(true); // Pause the game
-            }
-          });
-
-          score.current += 1; // Increment score
-          return updatedObstacles;
-        });
+            .filter((obstacle) => obstacle.y < height)
+        );
       }
-    }, 100);
+    }, 16);
 
     return () => clearInterval(interval);
-  }, [gamePaused]);
+  }, [gameOver]);
+
+  useEffect(() => {
+    obstacles.forEach((obstacle) => {
+      if (
+        ballPosition.x < obstacle.x + OBSTACLE_SIZE &&
+        ballPosition.x + BALL_RADIUS * 2 > obstacle.x &&
+        ballPosition.y < obstacle.y + OBSTACLE_SIZE &&
+        ballPosition.y + BALL_RADIUS * 2 > obstacle.y
+      ) {
+        handleGameOver();
+      }
+    });
+  }, [obstacles, ballPosition]);
+
+  const handleGameOver = () => {
+    setGameOver(true);
+    stopObstacleGeneration();
+    unsubscribeGyroscope();
+    Alert.alert('Game Over', 'Você colidiu com um obstáculo!', [
+      {
+        text: 'Reiniciar',
+        onPress: resetGame,
+      },
+      {
+        text: 'Voltar',
+        onPress: () => navigation.goBack()
+      },
+    ]);
+  };
+
+  const subscribeGyroscope = () => {
+    const sub = Gyroscope.addListener((data) => {
+      setGyroscopeData({ x: data.x, y: data.y });
+    });
+    Gyroscope.setUpdateInterval(10);
+    setSubscription(sub);
+  };
+
+  const unsubscribeGyroscope = () => {
+    subscription && subscription.remove();
+    setSubscription(null);
+  };
 
   const startObstacleGeneration = () => {
-    obstacleIntervalRef.current = setInterval(() => {
-      if (!gamePaused) {
-        const newObstacle: Obstacle = {
-          id: obstacleId.current++,
-          x: Math.random() * (width - OBSTACLE_SIZE),
-          y: -OBSTACLE_SIZE,
-        };
-        setObstacles((prev) => [...prev, newObstacle]);
-      }
+    obstacleInterval.current = setInterval(() => {
+      const newObstacle = {
+        id: obstacleId.current++,
+        x: Math.random() * (width - OBSTACLE_SIZE),
+        y: -OBSTACLE_SIZE,
+      };
+      setObstacles((prev) => [...prev, newObstacle]);
     }, INITIAL_OBSTACLE_INTERVAL);
   };
 
   const stopObstacleGeneration = () => {
-    if (obstacleIntervalRef.current) {
-      clearInterval(obstacleIntervalRef.current);
-    }
+    obstacleInterval.current && clearInterval(obstacleInterval.current);
   };
 
   const resetGame = () => {
+    setBallPosition({ x: width / 2 - BALL_RADIUS, y: height - 100 });
     setObstacles([]);
     obstacleId.current = 0;
-    stopObstacleGeneration();
+    setGameOver(false);
     startObstacleGeneration();
-    score.current = 0;
-    setGamePaused(false); // Resume the game
+    subscribeGyroscope(); 
   };
 
-  const renderObstacles = () => {
-    return obstacles.map((obstacle) => (
-      <View
-        key={obstacle.id}
-        style={[styles.obstacle, { left: obstacle.x, top: obstacle.y }]}
-      />
-    ));
-  };
+  if (!fontsLoaded) {
+    return <View style={styles.container} />;
+  }
 
   return (
-    <LinearGradient colors={['#4c669f', '#3b5998', '#192f6a']} style={styles.background}>
-      <Text style={styles.title}>Desvie dos Obstáculos! Pontuação: {score.current}</Text>
-      {renderObstacles()}
-      <View style={[styles.ship, { left: shipPositionRef.current.x }]} />
-      {gamePaused && (
-        <TouchableOpacity style={styles.pauseOverlay} onPress={resetGame}>
-          <Text style={styles.pauseText}>Jogo Pausado. Toque para Reiniciar.</Text>
-        </TouchableOpacity>
-      )}
-    </LinearGradient>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={['#4c669f', '#3b5998', '#192f6a']}
+        style={styles.background}
+      >
+        <Text style={styles.title}>Jogo: Desvie dos Obstáculos</Text>
+        {obstacles.map((obstacle) => (
+          <View
+            key={obstacle.id}
+            style={[styles.obstacle, {
+              left: obstacle.x,
+              top: obstacle.y,
+            }]}
+          />
+        ))}
+        <View style={[styles.ball, { left: ballPosition.x, top: ballPosition.y }]} />
+      </LinearGradient>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   background: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: 'white',
-    position: 'absolute',
-    top: 50,
+    marginTop: 50,
+    marginLeft: 20,
+    fontFamily: 'Minecraftia',
   },
-  ship: {
-    width: SHIP_WIDTH,
-    height: SHIP_HEIGHT,
+  ball: {
+    width: BALL_RADIUS * 2,
+    height: BALL_RADIUS * 2,
+    borderRadius: BALL_RADIUS,
     backgroundColor: '#FF4500',
     position: 'absolute',
-    bottom: 50,
-    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 5,
+    },
+    shadowOpacity: 0.34,
+    shadowRadius: 6.27,
+    elevation: 10,
+    borderWidth: 3,
+    borderColor: '#fff',
   },
   obstacle: {
     width: OBSTACLE_SIZE,
@@ -154,21 +196,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#00FF00',
     position: 'absolute',
     borderRadius: 5,
-  },
-  pauseOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  pauseText: {
-    fontSize: 18,
-    color: 'white',
-    textAlign: 'center',
   },
 });
 
